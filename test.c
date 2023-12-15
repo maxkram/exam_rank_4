@@ -1,9 +1,7 @@
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <string.h>
 
-// Function to write an error message to standard error (file descriptor 2)
 int err(char *str) 
 {
     while (*str)
@@ -11,7 +9,6 @@ int err(char *str)
     return 1;
 }
 
-// Function to change the current directory
 int cd(char **argv, int i) 
 {
     if (i != 2)
@@ -21,7 +18,6 @@ int cd(char **argv, int i)
     return 0; // Return 0 on success
 }
 
-// Function to execute a command
 int exec(char **argv, char **envp, int i) 
 {
     int fd[2];
@@ -68,3 +64,5 @@ int main(int argc, char **argv, char **envp)
     }
     return status; // Return the status of the last executed command
 }
+
+// leaks -atExit -- ./microshell /bin/ls "|" /usr/bin/grep microshell ";" /bin/echo i love my microshell

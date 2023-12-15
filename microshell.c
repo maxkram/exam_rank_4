@@ -1,12 +1,10 @@
-#include <string.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/wait.h>
-
-int tmp;
 
 int err(char *s)
 {
-	while (*s)
+	while(*s)
 		write(2, s++, 1);
 	return 1;
 }
@@ -15,51 +13,52 @@ int cd(char **av, int i)
 {
 	if (i != 2)
 		return err("error: cd: bad arguments\n");
-	if (chdir(av[1]))
-		return err("error: cd: cannot change directory to ") & err(av[1]) & err("\n");
+	else if (chdir(av[1]) == -1)
+		return err("error: cd: cannot change directory to "), err(av[1]), err("\n");
 	return 0;
 }
 
-int exe(char **av, char **ep, int i)
+int exec(char **av, char **ev, int i)
 {
-	int tm2[2], r;
-	int pip = (av[i] && !strcmp(av[i], "|"));
-	if (pip && (pipe(tm2)))
+	int fd[2];
+	int status;
+	int has_pipe = av[i] && !strcmp(av[i], "|");
+
+	if (has_pipe && pipe(fd) == -1)
 		return err("error: fatal\n");
+	
 	int pid = fork();
 	if (!pid)
 	{
 		av[i] = 0;
-		if (dup2(tmp, 0) == -1 | close(tmp) == -1 | (pip && (dup2(tm2[1], 1)
-			== -1 | close(tm2[0]) == -1 | close(tm2[1]) == -1)))
+		if (has_pipe && (dup2(fd[1], 1) == -1 || close(fd[0]) == -1 || close(fd[1]) == -1))
 			return err("error: fatal\n");
-		execve(*av, av, ep);
-		return err("error: cannot execute ") & err(*av) & err("\n");
+		execve(*av, av, ev);
+		return err("error: cannot execute "), err(*av), err("\n");
 	}
-	if ((pip && (dup2(tm2[0], tmp) == -1 | close(tm2[0]) == -1
-		| close(tm2[1]) == -1)) | (!pip && dup2(0, tmp) == -1) |
-		waitpid(pid, &r, 0) == -1)
+	waitpid(pid, &status, 0);
+	if (has_pipe && (dup2(fd[0], 0) == -1 || close(fd[0]) == -1 || close(fd[1]) == -1))
 		return err("error: fatal\n");
-	return WIFEXITED(r) && WEXITSTATUS(r);
+	return WIFEXITED(status) && WEXITSTATUS(status);
 }
 
-int main(int ac, char **av, char **ep)
+int main(int ac, char **av, char **ev)
 {
-	(void)ac;
-	int i = 0, r = 0;
-	tmp = dup(0);
-	while (av[i] && av[++i])
+	int i = 0;
+	int status = 0;
+	if (ac > 1)
 	{
-		av = av + i;
-		i = 0;
-		while (av[i] && strcmp(av[i], "|") && strcmp(av[i], ";"))
-			i++;
-		if (!strcmp(*av, "cd"))
-			r = cd(av, i);
-		else if (i)
-			r = exe(av, ep, i);
+		while (av[i] && av[++i])
+		{
+			av += i;
+			i = 0;
+			while (av[i] && strcmp(av[i], "|") && strcmp(av[i], ";"))
+				i++;
+			if (!strcmp(*av, "cd"))
+				status = cd(av, i);
+			else if (i)
+				status = exec(av, ev, i);
+		}
 	}
-	return ((dup2(0, tmp) == -1) && err("error: fatal\n")) | r;
+	return status;
 }
-
-// leaks -atExit -- ./microshell /bin/ls "|" /usr/bin/grep microshell ";" /bin/echo i love my microshell 
